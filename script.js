@@ -5,6 +5,8 @@ class HarveySystem {
         this.cases = this.loadCases();
         this.apiConfig = this.loadApiConfig();
         this.aiPrompt = this.loadAiPrompt();
+        this.currentUser = this.loadUserSession();
+        this.sharedData = this.loadSharedData(); // Dados compartilhados entre seções
         this.init();
     }
 
@@ -12,6 +14,513 @@ class HarveySystem {
         this.setupEventListeners();
         this.loadCasesGrid();
         this.loadSavedConfigurations();
+        this.updateUserInterface();
+        this.setupSectionIntegration();
+        this.initializeReports();
+    }
+
+    // Gerenciamento de dados compartilhados entre seções
+    loadSharedData() {
+        const saved = localStorage.getItem('harvey_shared_data');
+        return saved ? JSON.parse(saved) : {
+            currentCase: null,
+            analysisResults: [],
+            documentTemplates: {},
+            workflowState: {}
+        };
+    }
+
+    saveSharedData() {
+        localStorage.setItem('harvey_shared_data', JSON.stringify(this.sharedData));
+    }
+
+    // Configurar integração entre seções
+    setupSectionIntegration() {
+        // Observar mudanças de seção para atualizar dados
+        this.setupSectionObserver();
+        
+        // Configurar transferência automática de dados
+        this.setupDataTransfer();
+    }
+
+    setupSectionObserver() {
+        // Observer para detectar mudanças de seção
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                    const target = mutation.target;
+                    if (target.classList.contains('active') && target.classList.contains('section')) {
+                        this.onSectionChange(target.id);
+                    }
+                }
+            });
+        });
+
+        // Observar todas as seções
+        document.querySelectorAll('.section').forEach(section => {
+            observer.observe(section, { attributes: true });
+        });
+    }
+
+    setupDataTransfer() {
+        // Configurar botões de transferência de dados
+        this.addDataTransferButtons();
+    }
+
+    addDataTransferButtons() {
+        // Adicionar botões de integração nos casos
+        const casesGrid = document.getElementById('cases-grid');
+        if (casesGrid) {
+            // Observer para detectar quando novos casos são adicionados
+            const observer = new MutationObserver(() => {
+                this.updateCaseCards();
+            });
+            observer.observe(casesGrid, { childList: true });
+        }
+    }
+
+    updateCaseCards() {
+        // Adicionar botões de ação rápida nos cards de casos
+        document.querySelectorAll('.case-card').forEach(card => {
+            if (!card.querySelector('.quick-actions')) {
+                const quickActions = document.createElement('div');
+                quickActions.className = 'quick-actions';
+                quickActions.style.cssText = 'margin-top: 10px; display: flex; gap: 5px;';
+                
+                const analyzeBtn = document.createElement('button');
+                analyzeBtn.className = 'btn btn-primary';
+                analyzeBtn.style.cssText = 'font-size: 12px; padding: 5px 10px;';
+                analyzeBtn.textContent = 'Analisar';
+                analyzeBtn.onclick = () => this.transferCaseToAnalysis(card);
+                
+                const reportBtn = document.createElement('button');
+                reportBtn.className = 'btn btn-primary';
+                reportBtn.style.cssText = 'font-size: 12px; padding: 5px 10px; background: #27ae60;';
+                reportBtn.textContent = 'Relatório';
+                reportBtn.onclick = () => this.transferCaseToReports(card);
+                
+                quickActions.appendChild(analyzeBtn);
+                quickActions.appendChild(reportBtn);
+                card.appendChild(quickActions);
+            }
+        });
+    }
+
+    onSectionChange(sectionId) {
+        // Atualizar interface baseada na seção ativa
+        switch(sectionId) {
+            case 'analise':
+                this.populateAnalysisFromSharedData();
+                break;
+            case 'relatorios':
+                this.populateReportsFromSharedData();
+                break;
+            case 'casos':
+                this.refreshCasesWithAnalysisData();
+                break;
+        }
+    }
+
+    // Transferir caso para análise jurídica
+    transferCaseToAnalysis(caseCard) {
+        const caseNumber = caseCard.querySelector('.case-number')?.textContent?.replace('Processo: ', '') || '';
+        const caseObject = caseCard.querySelector('.case-object')?.textContent || '';
+        
+        // Encontrar o caso completo
+        const fullCase = this.cases.find(c => c.numero === caseNumber);
+        
+        if (fullCase) {
+            // Salvar caso atual nos dados compartilhados
+            this.sharedData.currentCase = fullCase;
+            this.saveSharedData();
+            
+            // Mudar para seção de análise
+            this.switchSection('analise');
+            
+            // Preencher dados automaticamente
+            this.populateAnalysisFromCase(fullCase);
+            
+            this.showNotification(`Caso ${caseNumber} transferido para análise jurídica.`, 'success');
+        }
+    }
+
+    // Transferir caso para relatórios
+    transferCaseToReports(caseCard) {
+        const caseNumber = caseCard.querySelector('.case-number')?.textContent?.replace('Processo: ', '') || '';
+        const fullCase = this.cases.find(c => c.numero === caseNumber);
+        
+        if (fullCase) {
+            this.sharedData.currentCase = fullCase;
+            this.saveSharedData();
+            
+            this.switchSection('relatorios');
+            this.populateReportsFromCase(fullCase);
+            
+            this.showNotification(`Caso ${caseNumber} transferido para relatórios.`, 'success');
+        }
+    }
+
+    // Preencher análise com dados do caso
+    populateAnalysisFromCase(caseData) {
+        // Preencher dados da empresa se disponível
+        const empresaDados = document.getElementById('empresa-dados');
+        if (empresaDados && caseData) {
+            empresaDados.value = `Processo: ${caseData.numero}\nObjeto: ${caseData.objeto}\nÓrgão: ${caseData.orgao}\nModalidade: ${caseData.modalidade}`;
+        }
+
+        // Se há dados de análise prévia, mostrar
+        const analysisResult = this.sharedData.analysisResults.find(r => r.caseId === caseData.id);
+        if (analysisResult) {
+            const resultDiv = document.getElementById('analise-resultado');
+            if (resultDiv) {
+                resultDiv.innerHTML = analysisResult.content;
+            }
+        }
+    }
+
+    // Preencher análise com dados compartilhados
+    populateAnalysisFromSharedData() {
+        if (this.sharedData.currentCase) {
+            this.populateAnalysisFromCase(this.sharedData.currentCase);
+        }
+    }
+
+    // Preencher relatórios com dados do caso
+    populateReportsFromCase(caseData) {
+        // Implementar preenchimento automático de relatórios
+        const reportSection = document.getElementById('relatorios');
+        if (reportSection) {
+            // Adicionar informações do caso no relatório
+            this.updateReportWithCaseData(caseData);
+        }
+    }
+
+    // Preencher relatórios com dados compartilhados
+    populateReportsFromSharedData() {
+        if (this.sharedData.currentCase) {
+            this.populateReportsFromCase(this.sharedData.currentCase);
+        }
+        
+        // Incluir resultados de análises
+        if (this.sharedData.analysisResults.length > 0) {
+            this.updateReportWithAnalysisResults();
+        }
+    }
+
+    // Atualizar casos com dados de análise
+    refreshCasesWithAnalysisData() {
+        this.cases.forEach(caseItem => {
+            const analysisResult = this.sharedData.analysisResults.find(r => r.caseId === caseItem.id);
+            if (analysisResult) {
+                caseItem.hasAnalysis = true;
+                caseItem.analysisDate = analysisResult.date;
+            }
+        });
+        this.loadCasesGrid();
+    }
+
+    // Salvar resultado de análise
+    saveAnalysisResult(caseId, content, type = 'edital') {
+        const result = {
+            id: Date.now(),
+            caseId: caseId,
+            type: type,
+            content: content,
+            date: new Date().toISOString(),
+            user: this.currentUser?.name || 'Sistema'
+        };
+        
+        this.sharedData.analysisResults.push(result);
+        this.saveSharedData();
+        
+        // Atualizar dashboard com nova análise
+        this.updateDashboardStats();
+    }
+
+    // Atualizar estatísticas do dashboard
+    updateDashboardStats() {
+        const casosAtivos = this.cases.filter(c => c.status === 'open').length;
+        const editaisAnalisados = this.sharedData.analysisResults.filter(r => r.type === 'edital').length;
+        const defesasElaboradas = this.sharedData.analysisResults.filter(r => ['recurso', 'contrarrazao', 'defesa'].includes(r.type)).length;
+
+        const casosAtivosEl = document.getElementById('casos-ativos');
+        const editaisAnalisadosEl = document.getElementById('editais-analisados');
+        const defesasElaboradasEl = document.getElementById('defesas-elaboradas');
+        
+        if (casosAtivosEl) casosAtivosEl.textContent = casosAtivos;
+        if (editaisAnalisadosEl) editaisAnalisadosEl.textContent = editaisAnalisados;
+        if (defesasElaboradasEl) defesasElaboradasEl.textContent = defesasElaboradas;
+    }
+
+    // Criar workflow entre seções
+    createWorkflow(steps) {
+        this.sharedData.workflowState = {
+            steps: steps,
+            currentStep: 0,
+            completed: false,
+            startDate: new Date().toISOString()
+        };
+        this.saveSharedData();
+    }
+
+    // Avançar no workflow
+    advanceWorkflow() {
+        if (this.sharedData.workflowState.currentStep < this.sharedData.workflowState.steps.length - 1) {
+            this.sharedData.workflowState.currentStep++;
+            this.saveSharedData();
+            
+            const nextStep = this.sharedData.workflowState.steps[this.sharedData.workflowState.currentStep];
+            this.showNotification(`Próximo passo: ${nextStep.name}`, 'info');
+            
+            if (nextStep.section) {
+                this.switchSection(nextStep.section);
+            }
+        } else {
+            this.sharedData.workflowState.completed = true;
+            this.saveSharedData();
+            this.showNotification('Workflow concluído!', 'success');
+        }
+    }
+
+    // Gerenciamento de usuário
+    loadUserSession() {
+        const userData = localStorage.getItem('harvey_user_session');
+        return userData ? JSON.parse(userData) : null;
+    }
+
+    saveUserSession(userData) {
+        localStorage.setItem('harvey_user_session', JSON.stringify(userData));
+        this.currentUser = userData;
+        this.updateUserInterface();
+    }
+
+    clearUserSession() {
+        localStorage.removeItem('harvey_user_session');
+        this.currentUser = null;
+        this.updateUserInterface();
+    }
+
+    updateUserInterface() {
+        const preLoginState = document.getElementById('preLoginState');
+        const postLoginState = document.getElementById('postLoginState');
+        const userName = document.getElementById('userName');
+        const userAvatar = document.getElementById('userAvatar');
+
+        if (this.currentUser && preLoginState && postLoginState) {
+            // Estado pós-login
+            preLoginState.style.display = 'none';
+            postLoginState.style.display = 'flex';
+            if (userName) userName.textContent = this.currentUser.name || 'Usuário';
+            if (userAvatar) userAvatar.textContent = (this.currentUser.name || 'U').charAt(0).toUpperCase();
+        } else if (preLoginState && postLoginState) {
+            // Estado pré-login
+            preLoginState.style.display = 'flex';
+            postLoginState.style.display = 'none';
+        }
+    }
+
+    openLoginModal() {
+        const modal = document.getElementById('loginModal');
+        if (modal) {
+            modal.style.display = 'block';
+            this.showLoginForm();
+        }
+    }
+
+    closeLoginModal() {
+        const modal = document.getElementById('loginModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    showLoginForm() {
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const modalTitle = document.querySelector('#loginModal h3');
+        
+        if (loginForm) loginForm.style.display = 'flex';
+        if (registerForm) registerForm.style.display = 'none';
+        if (modalTitle) modalTitle.textContent = 'Entrar no Sistema';
+    }
+
+    showRegisterForm() {
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const modalTitle = document.querySelector('#loginModal h3');
+        
+        if (loginForm) loginForm.style.display = 'none';
+        if (registerForm) registerForm.style.display = 'flex';
+        if (modalTitle) modalTitle.textContent = 'Cadastrar no Sistema';
+    }
+
+    async handleLogin(email, password) {
+        try {
+            // Simulação de autenticação (em produção, seria uma chamada para API)
+            if (email && password) {
+                const userData = {
+                    id: Date.now(),
+                    name: email.split('@')[0],
+                    email: email,
+                    loginTime: new Date().toISOString()
+                };
+                
+                this.saveUserSession(userData);
+                this.closeLoginModal();
+                this.showNotification('Login realizado com sucesso!', 'success');
+                return true;
+            }
+        } catch (error) {
+            this.showNotification('Erro ao fazer login. Tente novamente.', 'error');
+            return false;
+        }
+    }
+
+    async handleRegister(name, email, password, confirmPassword) {
+        try {
+            if (password !== confirmPassword) {
+                this.showNotification('As senhas não coincidem.', 'error');
+                return false;
+            }
+
+            if (name && email && password) {
+                const userData = {
+                    id: Date.now(),
+                    name: name,
+                    email: email,
+                    loginTime: new Date().toISOString()
+                };
+                
+                this.saveUserSession(userData);
+                this.closeLoginModal();
+                this.showNotification('Cadastro realizado com sucesso!', 'success');
+                return true;
+            }
+        } catch (error) {
+            this.showNotification('Erro ao fazer cadastro. Tente novamente.', 'error');
+            return false;
+        }
+    }
+
+    logout() {
+        this.clearUserSession();
+        this.showNotification('Logout realizado com sucesso!', 'success');
+        // Fechar dropdown se estiver aberto
+        const dropdown = document.getElementById('userDropdown');
+        if (dropdown) {
+            dropdown.style.display = 'none';
+        }
+    }
+
+    toggleUserMenu() {
+        const dropdown = document.getElementById('userDropdown');
+        if (dropdown) {
+            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+        }
+    }
+
+    editProfile() {
+        // Implementar edição de perfil
+        this.showNotification('Funcionalidade de edição de perfil em desenvolvimento.', 'info');
+        const dropdown = document.getElementById('userDropdown');
+        if (dropdown) {
+            dropdown.style.display = 'none';
+        }
+    }
+
+    showNotification(message, type = 'info') {
+        // Criar notificação temporária
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 5px;
+            color: white;
+            font-weight: 600;
+            z-index: 10000;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        `;
+        
+        switch(type) {
+            case 'success':
+                notification.style.background = '#27ae60';
+                break;
+            case 'error':
+                notification.style.background = '#e74c3c';
+                break;
+            case 'info':
+            default:
+                notification.style.background = '#3498db';
+                break;
+        }
+        
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 3000);
+    }
+
+    // Métodos implementados que estavam faltando
+    initializeReports() {
+        console.log('Sistema de relatórios inicializado');
+        // Carregar templates de relatório se existirem
+        this.loadReportTemplates();
+    }
+
+    loadReportTemplates() {
+        // Carregar templates salvos
+        const templates = localStorage.getItem('harvey_report_templates');
+        if (templates) {
+            this.sharedData.documentTemplates = JSON.parse(templates);
+        }
+    }
+
+    updateReportWithCaseData(caseData) {
+        console.log('Atualizando relatório com dados do caso:', caseData.numero);
+        
+        // Buscar área de relatório na interface
+        const reportArea = document.getElementById('report-content') || document.querySelector('.report-content');
+        if (reportArea && caseData) {
+            const caseInfo = `
+                <div class="case-report-section">
+                    <h4>Informações do Caso</h4>
+                    <p><strong>Processo:</strong> ${caseData.numero}</p>
+                    <p><strong>Objeto:</strong> ${caseData.objeto}</p>
+                    <p><strong>Órgão:</strong> ${caseData.orgao}</p>
+                    <p><strong>Modalidade:</strong> ${caseData.modalidade}</p>
+                    <p><strong>Data de Publicação:</strong> ${caseData.dataPublicacao}</p>
+                    <p><strong>Status:</strong> ${caseData.status}</p>
+                </div>
+            `;
+            reportArea.innerHTML = caseInfo + (reportArea.innerHTML || '');
+        }
+    }
+
+    updateReportWithAnalysisResults() {
+        console.log('Incluindo resultados de análises no relatório');
+        
+        const reportArea = document.getElementById('report-content') || document.querySelector('.report-content');
+        if (reportArea && this.sharedData.analysisResults.length > 0) {
+            const analysisSection = `
+                <div class="analysis-report-section">
+                    <h4>Resultados de Análises</h4>
+                    ${this.sharedData.analysisResults.map(result => `
+                        <div class="analysis-item">
+                            <h5>Análise ${result.type} - ${new Date(result.date).toLocaleDateString()}</h5>
+                            <div class="analysis-content">${result.content}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            reportArea.innerHTML += analysisSection;
+        }
     }
 
     setupEventListeners() {
@@ -30,33 +539,135 @@ class HarveySystem {
         const sendButton = document.getElementById('send-button');
         const userInput = document.getElementById('user-input');
         
-        sendButton.addEventListener('click', () => this.sendMessage());
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.sendMessage();
+        if (sendButton && userInput) {
+            sendButton.addEventListener('click', () => this.sendMessage());
+            userInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.sendMessage();
+                }
+            });
+        }
+
+        // New case button
+        const newCaseBtn = document.getElementById('new-case-btn');
+        if (newCaseBtn) {
+            newCaseBtn.addEventListener('click', () => {
+                this.openModal('newCaseModal');
+            });
+        }
+
+        // New case form
+        const newCaseForm = document.getElementById('newCaseForm');
+        if (newCaseForm) {
+            newCaseForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.createNewCase();
+            });
+        }
+
+        // Search functionality
+        const searchInput = document.getElementById('search-input');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                this.searchCases(e.target.value);
+            });
+        }
+
+        // File upload for edital analysis
+        const editalUpload = document.getElementById('edital-upload');
+        if (editalUpload) {
+            editalUpload.addEventListener('change', (e) => {
+                this.handleEditalUpload(e.target.files[0]);
+            });
+        }
+
+        // Login/Register buttons
+        const loginBtn = document.getElementById('loginBtn');
+        if (loginBtn) {
+            loginBtn.addEventListener('click', () => this.openLoginModal());
+        }
+
+        // Login form
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const email = document.getElementById('loginEmail')?.value || '';
+                const password = document.getElementById('loginPassword')?.value || '';
+                this.handleLogin(email, password);
+            });
+        }
+
+        // Register form
+        const registerForm = document.getElementById('registerForm');
+        if (registerForm) {
+            registerForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = document.getElementById('registerName')?.value || '';
+                const email = document.getElementById('registerEmail')?.value || '';
+                const password = document.getElementById('registerPassword')?.value || '';
+                const confirmPassword = document.getElementById('registerConfirmPassword')?.value || '';
+                this.handleRegister(name, email, password, confirmPassword);
+            });
+        }
+
+        // User menu
+        const userAvatar = document.getElementById('userAvatar');
+        if (userAvatar) {
+            userAvatar.addEventListener('click', () => this.toggleUserMenu());
+        }
+
+        // Switch to register form
+        const switchToRegister = document.getElementById('switchToRegister');
+        if (switchToRegister) {
+            switchToRegister.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.showRegisterForm();
+            });
+        }
+
+        // Switch to login form
+        const switchToLogin = document.getElementById('switchToLogin');
+        if (switchToLogin) {
+            switchToLogin.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.showLoginForm();
+            });
+        }
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.user-menu')) {
+                const dropdown = document.getElementById('userDropdown');
+                if (dropdown) {
+                    dropdown.style.display = 'none';
+                }
             }
         });
 
-        // New case button
-        document.getElementById('new-case-btn').addEventListener('click', () => {
-            this.openModal('newCaseModal');
-        });
+        // API configuration save
+        const saveApiBtn = document.getElementById('save-api-config');
+        if (saveApiBtn) {
+            saveApiBtn.addEventListener('click', () => this.saveApiConfig());
+        }
 
-        // New case form
-        document.getElementById('newCaseForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.createNewCase();
-        });
+        // AI prompt save
+        const savePromptBtn = document.getElementById('save-prompt');
+        if (savePromptBtn) {
+            savePromptBtn.addEventListener('click', () => this.savePrompt());
+        }
 
-        // Search functionality
-        document.getElementById('search-input').addEventListener('input', (e) => {
-            this.searchCases(e.target.value);
-        });
+        // Clear chat button
+        const clearChatBtn = document.getElementById('clear-chat');
+        if (clearChatBtn) {
+            clearChatBtn.addEventListener('click', () => this.clearChat());
+        }
 
-        // File upload for edital analysis
-        document.getElementById('edital-upload').addEventListener('change', (e) => {
-            this.handleEditalUpload(e.target.files[0]);
-        });
+        // Edital analysis button
+        const analyzeBtn = document.getElementById('analyze-edital-btn');
+        if (analyzeBtn) {
+            analyzeBtn.addEventListener('click', () => this.analisarEdital());
+        }
     }
 
     switchSection(sectionName) {
@@ -66,20 +677,31 @@ class HarveySystem {
         });
 
         // Show selected section
-        document.getElementById(sectionName).classList.add('active');
+        const targetSection = document.getElementById(sectionName);
+        if (targetSection) {
+            targetSection.classList.add('active');
+        }
 
         // Update navigation
         document.querySelectorAll('.nav-links li').forEach(item => {
             item.classList.remove('active');
         });
-        document.querySelector(`[data-section="${sectionName}"]`).classList.add('active');
+        const navItem = document.querySelector(`[data-section="${sectionName}"]`);
+        if (navItem) {
+            navItem.classList.add('active');
+        }
 
         this.currentSection = sectionName;
+
+        // Update stats when returning to dashboard
+        if (sectionName === 'dashboard') {
+            this.updateDashboardStats();
+        }
     }
 
     async sendMessage() {
         const userInput = document.getElementById('user-input');
-        const message = userInput.value.trim();
+        const message = userInput?.value?.trim();
         
         if (!message) return;
 
@@ -89,8 +711,10 @@ class HarveySystem {
 
         // Disable send button temporarily
         const sendButton = document.getElementById('send-button');
-        sendButton.disabled = true;
-        sendButton.innerHTML = '<div class="loading"></div>';
+        if (sendButton) {
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<div class="loading"></div>';
+        }
 
         try {
             // Get AI response
@@ -100,13 +724,17 @@ class HarveySystem {
             this.addMessage('Desculpe, ocorreu um erro ao processar sua mensagem. Verifique as configurações da API.', false);
         } finally {
             // Re-enable send button
-            sendButton.disabled = false;
-            sendButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
+            if (sendButton) {
+                sendButton.disabled = false;
+                sendButton.innerHTML = '<i class="fas fa-paper-plane"></i>';
+            }
         }
     }
 
     addMessage(text, isUser = false) {
         const chatMessages = document.getElementById('chat-messages');
+        if (!chatMessages) return;
+
         const messageElement = document.createElement('div');
         messageElement.className = `message ${isUser ? 'user' : 'assistant'}`;
         
@@ -178,32 +806,46 @@ class HarveySystem {
 
     clearChat() {
         const chatMessages = document.getElementById('chat-messages');
-        chatMessages.innerHTML = `
-            <div class="message assistant">
-                Olá! Sou o Harvey, seu assistente jurídico especializado em licitações públicas (Lei 14.133/2021). Como posso ajudá-lo hoje?
-                <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-            </div>
-        `;
+        if (chatMessages) {
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    Olá! Sou o Harvey, seu assistente jurídico especializado em licitações públicas (Lei 14.133/2021). Como posso ajudá-lo hoje?
+                    <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                </div>
+            `;
+        }
     }
 
     openModal(modalId) {
-        document.getElementById(modalId).style.display = 'block';
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.display = 'block';
+        }
     }
 
     closeModal(modalId) {
-        document.getElementById(modalId).style.display = 'none';
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.display = 'none';
+        }
     }
 
     createNewCase() {
         const formData = {
-            numero: document.getElementById('processo-numero').value,
-            objeto: document.getElementById('objeto-licitacao').value,
-            modalidade: document.getElementById('modalidade').value,
-            orgao: document.getElementById('orgao-publico').value,
-            dataPublicacao: document.getElementById('data-publicacao').value,
+            numero: document.getElementById('processo-numero')?.value || '',
+            objeto: document.getElementById('objeto-licitacao')?.value || '',
+            modalidade: document.getElementById('modalidade')?.value || '',
+            orgao: document.getElementById('orgao-publico')?.value || '',
+            dataPublicacao: document.getElementById('data-publicacao')?.value || '',
             status: 'open',
             id: Date.now().toString()
         };
+
+        // Validar dados obrigatórios
+        if (!formData.numero || !formData.objeto) {
+            this.showNotification('Por favor, preencha pelo menos o número do processo e objeto da licitação.', 'error');
+            return;
+        }
 
         this.cases.push(formData);
         this.saveCases();
@@ -212,10 +854,14 @@ class HarveySystem {
         this.updateDashboardStats();
 
         // Clear form
-        document.getElementById('newCaseForm').reset();
+        const form = document.getElementById('newCaseForm');
+        if (form) {
+            form.reset();
+        }
 
         // Show success message
         this.addMessage(`Novo caso criado: ${formData.numero} - ${formData.objeto}`, false);
+        this.showNotification('Caso criado com sucesso!', 'success');
     }
 
     loadCasesGrid() {
@@ -243,12 +889,21 @@ class HarveySystem {
             
             casesGrid.appendChild(caseCard);
         });
+
+        // Adicionar botões de ação após carregar os cards
+        setTimeout(() => {
+            this.updateCaseCards();
+        }, 100);
     }
 
     openCaseDetails(caseId) {
         const case_ = this.cases.find(c => c.id === caseId);
         if (case_) {
             this.addMessage(`Abrindo detalhes do caso: ${case_.numero} - ${case_.objeto}`, false);
+            
+            // Salvar caso atual para uso em outras seções
+            this.sharedData.currentCase = case_;
+            this.saveSharedData();
         }
     }
 
@@ -282,6 +937,11 @@ class HarveySystem {
             
             casesGrid.appendChild(caseCard);
         });
+
+        // Atualizar cards com botões
+        setTimeout(() => {
+            this.updateCaseCards();
+        }, 100);
     }
 
     handleEditalUpload(file) {
@@ -294,89 +954,106 @@ class HarveySystem {
             
             // Simulate analysis
             setTimeout(() => {
-                this.addMessage('Análise do edital concluída. Principais pontos identificados: 1) Especificações técnicas compatíveis; 2) Documentação exigida conforme; 3) Prazos adequados. Deseja uma análise mais detalhada de algum aspecto específico?', false);
+                const analysisResult = 'Análise do edital concluída. Principais pontos identificados: 1) Especificações técnicas compatíveis; 2) Documentação exigida conforme; 3) Prazos adequados. Deseja uma análise mais detalhada de algum aspecto específico?';
+                this.addMessage(analysisResult, false);
+                
+                // Salvar resultado da análise se há um caso atual
+                if (this.sharedData.currentCase) {
+                    this.saveAnalysisResult(this.sharedData.currentCase.id, analysisResult, 'edital');
+                }
             }, 2000);
         };
         reader.readAsDataURL(file);
     }
 
     analisarEdital() {
-        const empresaDados = document.getElementById('empresa-dados').value;
-        const editalFile = document.getElementById('edital-upload').files[0];
+        const empresaDados = document.getElementById('empresa-dados')?.value || '';
+        const editalFile = document.getElementById('edital-upload')?.files[0];
 
-        if (!empresaDados || !editalFile) {
-            alert('Por favor, forneça os dados da empresa e faça upload do edital.');
+        if (!empresaDados && !editalFile) {
+            this.showNotification('Por favor, forneça os dados da empresa ou faça upload do edital.', 'error');
             return;
         }
 
         const resultadoDiv = document.getElementById('analise-resultado');
-        resultadoDiv.innerHTML = '<div class="loading"></div> Analisando edital...';
+        if (resultadoDiv) {
+            resultadoDiv.innerHTML = '<div class="loading">⏳ Analisando edital...</div>';
 
-        // Simulate analysis
-        setTimeout(() => {
-            resultadoDiv.innerHTML = `
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 10px;">
-                    <h4>Resultado da Análise</h4>
-                    <p><strong>Status:</strong> Análise concluída</p>
-                    <p><strong>Compatibilidade:</strong> 85% compatível com os requisitos</p>
-                    <p><strong>Pontos de atenção:</strong></p>
-                    <ul>
-                        <li>Verificar certificação ISO 9001</li>
-                        <li>Confirmar prazo de entrega</li>
-                        <li>Revisar garantia técnica</li>
-                    </ul>
-                    <button class="btn btn-primary" onclick="gerarRelatorio()">Gerar Relatório Completo</button>
-                </div>
-            `;
-        }, 3000);
+            // Simulate analysis
+            setTimeout(() => {
+                const analysisContent = `
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 10px;">
+                        <h4>Resultado da Análise</h4>
+                        <p><strong>Status:</strong> Análise concluída</p>
+                        <p><strong>Compatibilidade:</strong> 85% compatível com os requisitos</p>
+                        <p><strong>Pontos de atenção:</strong></p>
+                        <ul>
+                            <li>Verificar certificação ISO 9001</li>
+                            <li>Confirmar prazo de entrega</li>
+                            <li>Revisar garantia técnica</li>
+                        </ul>
+                        <button class="btn btn-primary" onclick="gerarRelatorio()">Gerar Relatório Completo</button>
+                    </div>
+                `;
+                
+                resultadoDiv.innerHTML = analysisContent;
+
+                // Salvar resultado se há um caso atual
+                if (this.sharedData.currentCase) {
+                    this.saveAnalysisResult(this.sharedData.currentCase.id, analysisContent, 'edital');
+                }
+
+                this.showNotification('Análise concluída com sucesso!', 'success');
+            }, 3000);
+        }
     }
 
     savePrompt() {
-        const prompt = document.getElementById('ai-prompt').value;
+        const prompt = document.getElementById('ai-prompt')?.value || '';
         localStorage.setItem('harvey_ai_prompt', prompt);
-        alert('Prompt salvo com sucesso!');
+        this.showNotification('Prompt salvo com sucesso!', 'success');
     }
 
     saveApiConfig() {
         const config = {
-            openaiApiKey: document.getElementById('openai-api-key').value,
-            googleDocsApi: document.getElementById('google-docs-api').value,
-            model: document.getElementById('model-selection').value
+            openaiApiKey: document.getElementById('openai-api-key')?.value || '',
+            googleDocsApi: document.getElementById('google-docs-api')?.value || '',
+            model: document.getElementById('model-selection')?.value || 'gpt-3.5-turbo'
         };
         
         localStorage.setItem('harvey_api_config', JSON.stringify(config));
         this.apiConfig = config;
-        alert('Configurações salvas com sucesso!');
+        this.showNotification('Configurações salvas com sucesso!', 'success');
     }
 
     loadSavedConfigurations() {
         // Load AI prompt
         const savedPrompt = this.loadAiPrompt();
-        if (savedPrompt) {
-            document.getElementById('ai-prompt').value = savedPrompt;
+        const promptElement = document.getElementById('ai-prompt');
+        if (savedPrompt && promptElement) {
+            promptElement.value = savedPrompt;
         }
 
         // Load API config
         const savedConfig = this.loadApiConfig();
         if (savedConfig.openaiApiKey) {
-            document.getElementById('openai-api-key').value = savedConfig.openaiApiKey;
+            const apiKeyElement = document.getElementById('openai-api-key');
+            if (apiKeyElement) {
+                apiKeyElement.value = savedConfig.openaiApiKey;
+            }
         }
         if (savedConfig.googleDocsApi) {
-            document.getElementById('google-docs-api').value = savedConfig.googleDocsApi;
+            const googleApiElement = document.getElementById('google-docs-api');
+            if (googleApiElement) {
+                googleApiElement.value = savedConfig.googleDocsApi;
+            }
         }
         if (savedConfig.model) {
-            document.getElementById('model-selection').value = savedConfig.model;
+            const modelElement = document.getElementById('model-selection');
+            if (modelElement) {
+                modelElement.value = savedConfig.model;
+            }
         }
-    }
-
-    updateDashboardStats() {
-        const casosAtivos = this.cases.filter(c => c.status === 'open').length;
-        const editaisAnalisados = this.cases.length;
-        const defesasElaboradas = this.cases.filter(c => c.status === 'completed').length;
-
-        document.getElementById('casos-ativos').textContent = casosAtivos;
-        document.getElementById('editais-analisados').textContent = editaisAnalisados;
-        document.getElementById('defesas-elaboradas').textContent = defesasElaboradas;
     }
 
     // Local storage methods
@@ -423,38 +1100,83 @@ class HarveySystem {
     }
 
     loadAiPrompt() {
-        return localStorage.getItem('harvey_ai_prompt') || document.getElementById('ai-prompt')?.value || '';
+        const saved = localStorage.getItem('harvey_ai_prompt');
+        const defaultPrompt = document.getElementById('ai-prompt')?.value || '';
+        return saved || defaultPrompt || '';
     }
 }
 
 // Global functions for HTML onclick events
 function clearChat() {
-    window.harveySystem.clearChat();
+    if (window.harveySystem) {
+        window.harveySystem.clearChat();
+    }
 }
 
 function closeModal(modalId) {
-    window.harveySystem.closeModal(modalId);
+    if (window.harveySystem) {
+        window.harveySystem.closeModal(modalId);
+    }
 }
 
 function analisarEdital() {
-    window.harveySystem.analisarEdital();
+    if (window.harveySystem) {
+        window.harveySystem.analisarEdital();
+    }
 }
 
 function savePrompt() {
-    window.harveySystem.savePrompt();
+    if (window.harveySystem) {
+        window.harveySystem.savePrompt();
+    }
 }
 
 function saveApiConfig() {
-    window.harveySystem.saveApiConfig();
+    if (window.harveySystem) {
+        window.harveySystem.saveApiConfig();
+    }
 }
 
 function gerarRelatorio() {
-    alert('Funcionalidade de geração de relatório será implementada com a integração do Google Docs API.');
+    if (window.harveySystem) {
+        window.harveySystem.showNotification('Funcionalidade de geração de relatório será implementada com a integração do Google Docs API.', 'info');
+    } else {
+        alert('Funcionalidade de geração de relatório será implementada com a integração do Google Docs API.');
+    }
+}
+
+function showRegisterForm() {
+    if (window.harveySystem) {
+        window.harveySystem.showRegisterForm();
+    }
+}
+
+function showLoginForm() {
+    if (window.harveySystem) {
+        window.harveySystem.showLoginForm();
+    }
+}
+
+function logout() {
+    if (window.harveySystem) {
+        window.harveySystem.logout();
+    }
+}
+
+function editProfile() {
+    if (window.harveySystem) {
+        window.harveySystem.editProfile();
+    }
 }
 
 // Initialize system when page loads
 document.addEventListener('DOMContentLoaded', function() {
-    window.harveySystem = new HarveySystem();
+    try {
+        window.harveySystem = new HarveySystem();
+        console.log('Harvey System initialized successfully');
+    } catch (error) {
+        console.error('Error initializing Harvey System:', error);
+    }
 });
 
 // Close modals when clicking outside
@@ -467,3 +1189,16 @@ window.onclick = function(event) {
     });
 }
 
+// Error handling for the system
+window.addEventListener('error', function(event) {
+    console.error('Harvey System Error:', event.error);
+});
+
+// Prevent form submissions that might cause page reload
+document.addEventListener('submit', function(event) {
+    if (event.target.id === 'newCaseForm' || 
+        event.target.id === 'loginForm' || 
+        event.target.id === 'registerForm') {
+        event.preventDefault();
+    }
+});
