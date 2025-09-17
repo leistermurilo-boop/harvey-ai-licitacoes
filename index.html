@@ -3,272 +3,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Harvey - Assistente Jurídico de Licitações</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root {
-            --primary: #1a3a5f;
-            --secondary: #2c5c8a;
-            --accent: #e74c3c;
-            --light: #f5f7fa;
-            --dark: #2c3e50;
-            --success: #27ae60;
-            --warning: #f39c12;
-            --text: #333;
-            --text-light: #777;
-            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-        }
-
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--light);
-            color: var(--text);
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
-
-        header {
-            background-color: var(--primary);
-            color: white;
-            padding: 1rem 2rem;
-            text-align: center;
-            box-shadow: var(--shadow);
-        }
-
-        header h1 {
-            margin: 0;
-            font-size: 1.8rem;
-        }
-
-        main {
-            flex: 1;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 2rem;
-            padding: 2rem;
-        }
-
-        .card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: var(--shadow);
-            padding: 1.5rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            transition: var(--transition);
-        }
-
-        .card:hover {
-            transform: translateY(-3px);
-        }
-
-        h2 {
-            margin-top: 0;
-            font-size: 1.4rem;
-            color: var(--primary);
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        label {
-            font-weight: 600;
-            color: var(--text);
-        }
-
-        input, textarea, select {
-            padding: 0.6rem;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            font-size: 1rem;
-            outline: none;
-            transition: var(--transition);
-        }
-
-        input:focus, textarea:focus, select:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 4px rgba(26, 58, 95, 0.3);
-        }
-
-        button {
-            background-color: var(--primary);
-            color: white;
-            padding: 0.8rem 1.2rem;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 1rem;
-            transition: var(--transition);
-        }
-
-        button:hover {
-            background-color: var(--secondary);
-        }
-
-        /* Chat Box básico */
-        #chat-messages {
-            max-height: 200px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            padding: 1rem;
-            border-radius: 8px;
-            background: #fff;
-        }
-
-        footer {
-            background-color: var(--dark);
-            color: white;
-            text-align: center;
-            padding: 1rem;
-            font-size: 0.9rem;
-        }
-
-        /* Modal simples para login */
-        #loginModal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6);
-            justify-content: center;
-            align-items: center;
-        }
-
-        #loginModal .modal-content {
-            background: #fff;
-            padding: 2rem;
-            border-radius: 12px;
-            width: 300px;
-            text-align: center;
-        }
-    </style>
+    <title>Harvey Licitações - Assistente Jurídico</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 </head>
 <body>
-
-<header>
-    <h1>Harvey - Assistente Jurídico de Licitações</h1>
-</header>
-
-<main>
-    <!-- Cadastro de Caso -->
-    <section class="card">
-        <h2><i class="fa-solid fa-folder-plus"></i> Novo Caso</h2>
-        <form id="newCaseForm">
-            <div class="form-group">
-                <label for="processo-numero">Número do Processo</label>
-                <input type="text" id="processo-numero" name="processo_numero" required>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="logo">
+                <h1>Harvey</h1>
+                <span>Licitações</span>
             </div>
-            <div class="form-group">
-                <label for="objeto-licitacao">Objeto da Licitação</label>
-                <textarea id="objeto-licitacao" name="objeto_licitacao" required></textarea>
-            </div>
-            <div class="form-group">
-                <label for="modalidade">Modalidade</label>
-                <select id="modalidade" name="modalidade" required>
-                    <option value="">Selecione...</option>
-                    <option value="pregao">Pregão</option>
-                    <option value="concorrencia">Concorrência</option>
-                    <option value="tomada-precos">Tomada de Preços</option>
-                    <option value="convite">Convite</option>
-                    <option value="concurso">Concurso</option>
-                    <option value="leilao">Leilão</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="orgao-publico">Órgão Público</label>
-                <input type="text" id="orgao-publico" name="orgao_publico" required>
-            </div>
-            <div class="form-group">
-                <label for="data-publicacao">Data de Publicação</label>
-                <input type="date" id="data-publicacao" name="data_publicacao" required>
-            </div>
-            <button type="submit" class="btn btn-primary">Criar Caso</button>
-        </form>
-    </section>
+            <nav>
+                <ul class="nav-links">
+                    <li class="active" data-section="dashboard"><i class="fas fa-chart-pie"></i> Dashboard</li>
+                    <li data-section="casos"><i class="fas fa-gavel"></i> Casos</li>
+                    <li data-section="analise-juridica"><i class="fas fa-microscope"></i> Análise Jurídica</li>
+                    <li data-section="chat"><i class="fas fa-comments"></i> Chat Assistente</li>
+                    <li data-section="configuracoes"><i class="fas fa-cog"></i> Configurações</li>
+                </ul>
+            </nav>
+        </aside>
 
-    <!-- Configurações -->
-    <section class="card">
-        <h2><i class="fa-solid fa-gear"></i> Configurações</h2>
-        <div class="form-group">
-            <label for="openai-api-key">Chave da API OpenAI</label>
-            <input type="password" id="openai-api-key" name="openai_api_key" placeholder="sk-..." required>
-        </div>
-        <div class="form-group">
-            <label for="google-docs-api">Credenciais do Google Docs (JSON)</label>
-            <textarea id="google-docs-api" name="google_docs_api" placeholder="{ ... }"></textarea>
-        </div>
-        <div class="form-group">
-            <label for="model-selection">Modelo</label>
-            <select id="model-selection" name="model_selection">
-                <option value="gpt-4">GPT-4</option>
-                <option value="gpt-3.5">GPT-3.5</option>
-            </select>
-        </div>
-    </section>
+        <main class="main-content">
+            <section id="dashboard" class="section active">
+                <h2>Dashboard</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Casos Ativos</h3>
+                        <p id="casos-ativos">3</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Editais Analisados</h3>
+                        <p id="editais-analisados">12</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Peças Elaboradas</h3>
+                        <p id="defesas-elaboradas">8</p>
+                    </div>
+                </div>
+            </section>
 
-    <!-- Upload Edital -->
-    <section class="card">
-        <h2><i class="fa-solid fa-file-arrow-up"></i> Upload de Edital</h2>
-        <div class="form-group">
-            <label for="edital-upload">Selecione o Edital</label>
-            <input type="file" id="edital-upload" name="edital_upload" accept=".pdf,.doc,.docx,.txt">
-        </div>
-    </section>
+            <section id="casos" class="section">
+                <h2>Gerenciamento de Casos</h2>
+                <p>Funcionalidade de casos a ser implementada aqui.</p>
+            </section>
 
-    <!-- Dados da Empresa -->
-    <section class="card">
-        <h2><i class="fa-solid fa-building"></i> Dados da Empresa</h2>
-        <div class="form-group">
-            <label for="empresa-dados">Informações</label>
-            <textarea id="empresa-dados" name="empresa_dados" placeholder="Razão Social, CNPJ, Responsável..."></textarea>
-        </div>
-    </section>
+            <section id="analise-juridica" class="section">
+                <h2>Análise Jurídica e Elaboração de Peças</h2>
+                <div class="ia-juridica-container">
+                    <h3>Assistente de IA para Peças Processuais</h3>
+                    <p>Preencha os campos abaixo para que a inteligência artificial gere um esboço da sua peça.</p>
+            
+                    <div class="form-group">
+                        <label>Tipo de Peça:</label>
+                        <div class="radio-group">
+                            <input type="radio" id="tipoRecurso" name="tipoPeca" value="recurso" checked>
+                            <label for="tipoRecurso">Recurso</label>
+                            <input type="radio" id="tipoContrarrazoes" name="tipoPeca" value="contrarrazões de recurso">
+                            <label for="tipoContrarrazoes">Contrarrazões de Recurso</label>
+                        </div>
+                    </div>
+            
+                    <div class="form-group">
+                        <label for="fatosDecisao">Fatos Principais e a Decisão a ser Recorrida/Contrarrazoada:</label>
+                        <textarea id="fatosDecisao" rows="6" placeholder="Ex: A decisão indeferiu o pedido de licença ambiental com base no art. X da Lei Y, alegando falta de documentação Z. O processo administrativo é o nº 12345-67.2025..."></textarea>
+                    </div>
+            
+                    <div class="form-group">
+                        <label for="pontosArgumentar">Pontos Principais a serem Argumentados (separados por vírgula):</label>
+                        <input type="text" id="pontosArgumentar" placeholder="Ex: nulidade da citação, cerceamento de defesa, erro material na análise">
+                    </div>
+            
+                    <button id="btnGerarEsboco" data-original-text="Gerar Esboço com IA">
+                        <span class="btn-text">Gerar Esboço com IA</span>
+                        <span class="spinner-border" style="display: none;"></span>
+                    </button>
+            
+                    <div class="resultado-container">
+                        <div class="resultado-header">
+                            <h4>Resultado Gerado pela IA</h4>
+                            <button id="btnCopiarTexto">Copiar Texto</button>
+                        </div>
+                        <div id="resultadoIA" class="resultado-box">
+                            <span class="placeholder-text">Aguardando geração...</span>
+                        </div>
+                        <p class="aviso-legal">
+                            <strong>Atenção:</strong> Este é um esboço gerado por IA. Revise e ajuste o conteúdo conforme a necessidade e a responsabilidade técnica do advogado.
+                        </p>
+                    </div>
+                </div>
+            </section>
+            
+            <section id="chat" class="section">
+                 <h2>Chat Assistente</h2>
+                 <p>Funcionalidade de chat a ser implementada aqui.</p>
+            </section>
 
-    <!-- Grid de Casos (JS preenche) -->
-    <section class="card">
-        <h2><i class="fa-solid fa-table-list"></i> Casos Cadastrados</h2>
-        <div id="cases-grid"></div>
-    </section>
-
-    <!-- Chat Assistente -->
-    <section class="card">
-        <h2><i class="fa-solid fa-comments"></i> Chat com Harvey</h2>
-        <div id="chat-messages"></div>
-        <div class="form-group">
-            <input type="text" id="chat-input" placeholder="Digite sua mensagem...">
-            <button id="send-chat">Enviar</button>
-        </div>
-    </section>
-</main>
-
-<!-- Modal de Login -->
-<div id="loginModal">
-    <div class="modal-content">
-        <h3>Login</h3>
-        <input type="text" id="username" placeholder="Usuário">
-        <input type="password" id="password" placeholder="Senha">
-        <button id="loginButton">Entrar</button>
+            <section id="configuracoes" class="section">
+                <h2>Configurações</h2>
+                <p>Tela de configurações a ser implementada aqui.</p>
+            </section>
+        </main>
     </div>
-</div>
 
-<footer>
-    &copy; 2025 Harvey AI - Todos os direitos reservados.
-</footer>
-
-<!-- Importa o JS -->
-<script src="./js/harvey-system.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        new HarveySystem();
-    });
-</script>
-
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
